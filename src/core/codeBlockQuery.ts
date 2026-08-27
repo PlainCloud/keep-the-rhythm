@@ -149,6 +149,10 @@ export function parseQueryToJSEP(query: string) {
 						break;
 					case "WEEKS":
 						config.numberOfWeeks = Number(details) || 20;
+						config.numberOfDays = (Number(details) || 20) * 7;
+						break;
+					case "DAYS":
+						config.numberOfDays = Number(details) || 30;
 						break;
 					case "UNIT":
 						if (isValidUnit(details.trim())) {

@@ -1,5 +1,5 @@
 import { state } from "@/core/pluginState";
-import { HeatmapColorModes } from "../defs/types";
+import { HeatmapColorModes, HeatmapConfig } from "../defs/types";
 import { CalculationType, TargetCount } from "../defs/types";
 import { DailyActivity } from "@/db/types";
 import { App } from "obsidian";
@@ -11,6 +11,7 @@ import { TFile } from "obsidian";
 import { getLanguageBasedWordCount } from "@/core/wordCounting";
 import { MarkdownView } from "obsidian";
 import { WorkspaceLeaf } from "obsidian";
+import { getStartOfWeek } from "./dateUtils";
 import { moment as _moment } from "obsidian";
 import { Vault } from "obsidian";
 
@@ -62,28 +63,76 @@ export const getDateForCell = (
 	weekIndex: number,
 	dayIndex: number,
 	totalAmountOfWeeks: number,
-	baseDate?: Date, // <-- optional new parameter
 ): Date => {
-	let date: Date;
+	// Calculate relative to today, so the grid always ends on the current week
+	const today = new Date();
+	const date = new Date(today);
 
-	if (baseDate) {
-		// Start from the provided base date (e.g., January 1st)
-		date = new Date(baseDate);
-		date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
-	} else {
-		// Original behavior: calculate relative to today
-		const today = new Date();
-		date = new Date(today);
+	const currentDayIndex = getDayIndex(date.getDay()); // Monday=0 etc
+	date.setDate(date.getDate() - currentDayIndex);
 
-		const currentDayIndex = getDayIndex(date.getDay()); // Monday=0 etc
-		date.setDate(date.getDate() - currentDayIndex);
-
-		// Offset from the current week's Monday
-		const weekOffset = weekIndex - (totalAmountOfWeeks - 1);
-		date.setDate(date.getDate() + weekOffset * 7 + dayIndex);
-	}
+	// Offset from the current week's Monday
+	const weekOffset = weekIndex - (totalAmountOfWeeks - 1);
+	date.setDate(date.getDate() + weekOffset * 7 + dayIndex);
 
 	return date;
+};
+
+/**
+ * Computes the rolling window shown by the heatmap.
+ *
+ * The heatmap only shows the last @numberOfDays days (default 30) and always
+ * ends today, so the window automatically rolls forward as time passes.
+ * A custom @startDate only acts as a lower bound: days before it are never
+ * shown, but the window still ends today.
+ *
+ * When @weeksOverride is given (fit-to-width mode), a fixed number of whole
+ * weeks ending on the current week is shown instead, so the heatmap fills
+ * the available width while today stays as the last day.
+ */
+export const getHeatmapWindow = (
+	heatmapConfig: HeatmapConfig,
+	weeksOverride?: number,
+): { windowStart: Date; windowEnd: Date; weeksToShow: number } => {
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+
+	const windowEnd = today;
+
+	let windowStart: Date;
+
+	if (weeksOverride !== undefined) {
+		// Fit-to-width mode: show a fixed number of whole weeks ending on the
+		// current week, ignoring any custom start date so the heatmap can
+		// always fill the available width
+		const weeks = Math.min(53, Math.max(1, weeksOverride));
+		windowStart = new Date(
+			getStartOfWeek(today).getTime() - (weeks - 1) * 7 * 86400000,
+		);
+	} else {
+		const numberOfDays = heatmapConfig.numberOfDays ?? 30;
+		windowStart = new Date(today);
+		windowStart.setDate(today.getDate() - (numberOfDays - 1));
+
+		// A custom start date only acts as a lower bound in the fixed-days
+		// mode (code blocks): days before it are never shown, but the window
+		// still ends today
+		if (heatmapConfig.startDate) {
+			const customStart = new Date(heatmapConfig.startDate);
+			customStart.setHours(0, 0, 0, 0);
+			if (customStart > windowStart) windowStart = customStart;
+		}
+	}
+
+	const startMonday = getStartOfWeek(windowStart); // Monday of the window's first week
+	const todayMonday = getStartOfWeek(today); // Monday of the current week
+
+	const weeks =
+		Math.round(
+			(todayMonday.getTime() - startMonday.getTime()) / (7 * 86400000),
+		) + 1;
+
+	return { windowStart, windowEnd, weeksToShow: Math.max(1, weeks) };
 };
 
 export const getDayIndex = (dayIndex: number): number => {

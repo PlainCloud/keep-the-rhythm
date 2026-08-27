@@ -98,18 +98,6 @@ export const SETTINGS_SCHEMA: SettingsSchema = {
 					title: "Align heatmap cells to the left",
 				},
 				{
-					key: "heatmapConfig.startDate",
-					type: "date",
-					title: "Custom Start Date",
-					description:
-						"Makes the heatmap start from a specific date (like the start of the year).",
-				},
-				{
-					key: "heatmapConfig.numberOfWeeks",
-					type: "number",
-					title: "Default number of weeks displayed",
-				},
-				{
 					key: "heatmapConfig.intensityMode",
 					type: "custom",
 					title: "Coloring Mode",

@@ -1,9 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import * as RadixTooltip from "@radix-ui/react-tooltip";
 import jsep from "jsep";
 import { weekdaysNames, monthNames } from "../texts";
-import { getDateForCell, sumTimeEntries } from "@/utils/utils";
+import {
+	debounce,
+	getDateForCell,
+	getHeatmapWindow,
+	sumTimeEntries,
+} from "@/utils/utils";
 import { formatDate } from "@/utils/dateUtils";
 import { DailyActivity } from "@/db/types";
 import { Unit, HeatmapColorModes, HeatmapConfig } from "@/defs/types";
@@ -30,28 +35,62 @@ export const Heatmap = ({
 	const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
 	const [hoveredWeekday, setHoveredWeekday] = useState<number | null>(null);
 
+	// Sidebar heatmaps always fit their container width; code blocks use
+	// the DAYS/WEEKS options instead
+	const fitToWidth = !isCodeBlock;
+	const wrapperRef = useRef<HTMLDivElement>(null);
+	const [availableWidth, setAvailableWidth] = useState<number | null>(null);
+
+	// Roll the window forward when the day changes while Obsidian stays open
+	// (upstream removed the timer-based date trigger, but a rolling window
+	// needs to re-render at midnight to keep "today" as the last column).
+	const [, setNowTick] = useState(0);
+	useEffect(() => {
+		let lastDay = new Date().getDate();
+		const id = window.setInterval(() => {
+			const currentDay = new Date().getDate();
+			if (currentDay !== lastDay) {
+				lastDay = currentDay;
+				setNowTick((tick) => tick + 1);
+			}
+		}, 30000);
+		return () => window.clearInterval(id);
+	}, []);
+
 	useEffect(() => {
 		setUnit(preferredUnit);
 	}, [preferredUnit]);
 
-	let startDate: Date | null = null;
-	let endDate: Date | null = null;
-	const weeksToShow = heatmapConfig.numberOfWeeks || 52;
-	const baseDate = heatmapConfig.startDate
-		? new Date(heatmapConfig.startDate)
-		: undefined;
+	let weeksOverride: number | undefined;
+	if (fitToWidth && availableWidth !== null) {
+		// Wrapper padding (16px) + border (2px) + weekday label space (32px)
+		const labelSpace = heatmapConfig.hideWeekdayLabels ? 0 : 32;
+		const usable = availableWidth - 18 - labelSpace;
+		// Each column is 10px wide with a 2px gap: n*10 + (n-1)*2 = n*12 - 2
+		weeksOverride = Math.max(1, Math.floor((usable + 2) / 12));
+	}
+
+	const { windowStart, windowEnd, weeksToShow } = getHeatmapWindow(
+		heatmapConfig,
+		weeksOverride,
+	);
+
+	const startDateStr = formatDate(windowStart);
+	const endDateStr = formatDate(windowEnd);
 
 	const heatmapData = useLiveQuery(async () => {
 		const requiredDates = new Set<string>();
 
 		for (let week = 0; week < weeksToShow; week++) {
 			for (let day = 0; day < 7; day++) {
-				const date = getDateForCell(week, day, weeksToShow, baseDate);
+				const date = getDateForCell(week, day, weeksToShow);
+				const dateStr = formatDate(date);
 
-				requiredDates.add(formatDate(date));
-
-				if (!startDate || date < startDate) startDate = date;
-				if (!endDate || date > endDate) endDate = date;
+				// Days outside the rolling window render as empty cells,
+				// no need to query them
+				if (dateStr >= startDateStr && dateStr <= endDateStr) {
+					requiredDates.add(dateStr);
+				}
 			}
 		}
 
@@ -82,8 +121,8 @@ export const Heatmap = ({
 				results = await getDB()
 					.dailyActivity.where("[filePath+date]")
 					.between(
-						[value, startDate],
-						[value + "\uffff", endDate],
+						[value, startDateStr],
+						[value + "\uffff", endDateStr],
 						true,
 						true,
 					)
@@ -115,7 +154,31 @@ export const Heatmap = ({
 		}
 
 		return dateMap;
-	}, [unit, weeksToShow, baseDate, query]);
+	}, [unit, startDateStr, endDateStr, weeksToShow, query]);
+
+	// Fit-to-width mode: measure the available width so the number of columns
+	// shown fills the container, always keeping today as the last column.
+	// Only runs once the wrapper is mounted (heatmapReady), otherwise the
+	// measurement would never happen and the window would fall back to a
+	// fixed number of days. Layout effect avoids a visible flash of the
+	// fallback window before the first measurement.
+	const heatmapReady = !!heatmapData;
+	useLayoutEffect(() => {
+		if (!fitToWidth || !wrapperRef.current) return;
+
+		const container = wrapperRef.current.parentElement;
+		if (!container) return;
+
+		const measure = () => {
+			setAvailableWidth(container.clientWidth);
+		};
+
+		measure(); // measure immediately, no debounce for the first pass
+		const observer = new ResizeObserver(debounce(measure, 120));
+		observer.observe(container);
+
+		return () => observer.disconnect();
+	}, [fitToWidth, heatmapReady]);
 
 	if (!heatmapData) {
 		return <div className="heatmap-loading">Loading heatmap...</div>; // Replace with spinner or skeleton
@@ -126,7 +189,7 @@ export const Heatmap = ({
 		let lastMonth = -1;
 
 		for (let week = 0; week < weeksToShow; week++) {
-			const date = getDateForCell(week, 0, weeksToShow, baseDate);
+			const date = getDateForCell(week, 0, weeksToShow);
 
 			const localDate = new Date(
 				date.getTime() - date.getTimezoneOffset() * 60000,
@@ -185,7 +248,7 @@ export const Heatmap = ({
 							}
 						/>
 					</Tooltip>
-					<div className={wrapperClasses}>
+					<div className={wrapperClasses} ref={wrapperRef}>
 						{!heatmapConfig.hideWeekdayLabels && (
 							<div className="week-day-labels">
 								{weekdaysNames.map((day, dayIndex) => (
@@ -246,10 +309,25 @@ export const Heatmap = ({
 														weekIndex,
 														dayIndex,
 														weeksToShow,
-														baseDate,
 													);
 													const dateStr =
 														formatDate(date);
+
+													// Days outside the rolling
+													// window render as empty
+													// placeholders
+													if (
+														dateStr < startDateStr ||
+														dateStr > endDateStr
+													) {
+														return (
+															<div
+																key={dateStr}
+																className="heatmap-square heatmap-square-empty"
+															></div>
+														);
+													}
+
 													const count =
 														heatmapData[dateStr] ??
 														0;

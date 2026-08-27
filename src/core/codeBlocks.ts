@@ -1,7 +1,7 @@
 import { Entries } from "@/ui/components/Entries";
 import { SlotWrapper } from "@/ui/components/SlotWrapper";
 import { parseSlotQuery } from "./codeBlockQuery";
-import { state } from "./pluginState";
+import { EVENTS, state } from "./pluginState";
 import { MarkdownPostProcessorContext } from "obsidian";
 import { parseQueryToJSEP } from "./codeBlockQuery";
 import { createRoot } from "react-dom/client";
@@ -29,14 +29,20 @@ export function createHeatmapCodeBlock(
 	const container = el.createDiv(containerClass);
 	const root = createRoot(container);
 
-	root.render(
-		React.createElement(Heatmap, {
-			heatmapConfig: query?.options,
-			preferredUnit: query.options.unit,
-			query: query?.filter ?? undefined,
-			isCodeBlock: true,
-		}),
-	);
+	const rerender = () => {
+		root.render(
+			React.createElement(Heatmap, {
+				heatmapConfig: query?.options,
+				preferredUnit: query.options.unit,
+				query: query?.filter ?? undefined,
+				isCodeBlock: true,
+			}),
+		);
+	};
+
+	// Re-render on day change so the rolling window stays anchored to today
+	state.on(EVENTS.REFRESH_EVERYTHING, rerender);
+	rerender();
 
 	ctx.addChild(
 		new (class extends MarkdownRenderChild {
@@ -44,6 +50,7 @@ export function createHeatmapCodeBlock(
 				super(containerEl);
 			}
 			onunload() {
+				state.off(EVENTS.REFRESH_EVERYTHING, rerender);
 				root.unmount();
 			}
 		})(container),

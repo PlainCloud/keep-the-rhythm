@@ -126,6 +126,7 @@ export const STARTING_STATS = {
 export interface HeatmapConfig {
 	unit?: Unit;
 	numberOfWeeks?: number;
+	numberOfDays?: number;
 	intensityMode: HeatmapColorModes;
 	roundCells: boolean;
 	hideMonthLabels: boolean;
@@ -158,7 +159,8 @@ export const DEFAULT_SETTINGS: Settings = {
 		hideWeekdayLabels: false,
 		alignLeft: false,
 		numberOfWeeks: 52,
-		intensityMode: HeatmapColorModes.GRADUAL,
+		numberOfDays: 30,
+		intensityMode: HeatmapColorModes.STOPS,
 		intensityStops: {
 			low: 100,
 			medium: 500,

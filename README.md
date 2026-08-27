@@ -65,6 +65,8 @@ Customize your heatmap appearance with various options:
     - `stops`: Discrete color levels with thresholds
     - `liquid`: Color fills cells from bottom up
 - Cell Shape: Choose between **rounded** (default) or **squared** cells
+- Rolling Window: The heatmap automatically rolls forward every day, always ending today
+- Fit to Width: The sidebar heatmap auto-adjusts the number of days shown to fill the sidebar, with today always as the last day. Resize the sidebar and the window adapts
 - Interactive Navigation: Click cells to jump to daily notes (uses Obsidian's core plugin _Daily Notes_)
 
 
@@ -98,7 +100,8 @@ COLORING_MODE liquid                       // toggles the coloring mode (liquid,
 STOPS 100, 500, 1000                       // changes the keypoints used for calculating the color of the cells
 SQUARED_CELLS                              // changes the cell styling for a more squared look
 ROUNDED_CELLS                              // changes the cell styling for a rounded look
-WEEKS 24                                   // changes how many weeks are displayed (can affect performance)
+DAYS 30                                    // changes how many days are displayed (default 30, can affect performance)
+WEEKS 24                                   // same as DAYS 168
 ```
 
 Query Syntax:
@@ -112,6 +115,7 @@ Available Options:
 - `COLORING_MODE`: Set to `liquid`, `stops`, `solid`, or `gradual`
 - `STOPS`: Define threshold values (e.g., `100, 500, 1000`)
 - `SQUARED_CELLS` or `ROUNDED_CELLS`: Control cell appearance
+- `DAYS`: Show only the last N days, rolling forward automatically (e.g., `DAYS 30`)
 
 #### Data Slots (`ktr-slots`)
 

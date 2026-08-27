@@ -127,7 +127,7 @@
 
 	.heatmap-content {
 		padding-left: 0px;
-		mask-image: linear-gradient(to right, transparent 0px, black 28px);
+		mask-image: none;
 	}
 	&.is-code-block-heatmap .heatmap-content {
 		mask-image: unset;
@@ -144,7 +144,6 @@
 .align-left {
 	.heatmap-content {
 		align-items: flex-start;
-		mask-image: linear-gradient(to left, transparent 2px, black 64px);
 	}
 }
 .heatmap-square {
@@ -158,7 +157,7 @@
 	opacity: 0.2;
 }
 
-.heatmap-column .heatmap-square:hover {
+.heatmap-column .heatmap-square:not(.heatmap-square-empty):hover {
 	background-color: var(--interactive-accent);
 	transition-duration: 25ms;
 }
@@ -193,6 +192,11 @@
 	transform: translateX(-50%);
 }
 
+.heatmap-square-empty {
+	background: none !important;
+	cursor: default !important;
+	pointer-events: none;
+}
 .heatmap-square {
 	position: relative;
 	width: 10px;
