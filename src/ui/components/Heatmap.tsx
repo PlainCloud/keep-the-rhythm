@@ -166,7 +166,13 @@ export const Heatmap = ({
 	useLayoutEffect(() => {
 		if (!fitToWidth || !wrapperRef.current) return;
 
-		const container = wrapperRef.current.parentElement;
+		// Measure the sidebar root, not the fit-content wrapper: the
+		// 0.2.15 .heatmap-container is width:fit-content, so measuring it
+		// would collapse the window to the minimum width (circular).
+		const container =
+			wrapperRef.current.closest(".sideBarView, .sidebar-view") ??
+			wrapperRef.current.parentElement?.parentElement ??
+			wrapperRef.current.parentElement;
 		if (!container) return;
 
 		const measure = () => {
